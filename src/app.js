@@ -24,6 +24,11 @@ app.use(cookieParser());
 
 // --------------------------------------------------------------------------------------------------------------------
 
+// Message personnalisé à la racin pour s'assurer que l'API marche
+app.get("/", (req, res) => {
+  res.send("Bienvenue sur l'API de Cyber Showdown");
+});
+
 // quand je vais sur l'url register pour l'authentification ca va prendre les valeurs de mon body création initiale de valeur par le biais du formulaire HTML
 app.post("/auth/register", async (req, res) => {
   const { email, username, password, description, profile_picture } = req.body;
@@ -63,8 +68,36 @@ app.post("/auth/register", async (req, res) => {
 
 // --------------------------------------------------------------------------------------------------------------------
 
-// définition du port au lancement du server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`http://localhost:${PORT}/`);
+// Fonction pour obtenir l'adresse IP de l'interface réseau
+const getIpAddress = () => {
+  const os = require("os");
+  const networkInterfaces = os.networkInterfaces();
+  let ipAddress = "localhost"; // Valeur par défaut
+
+  for (const interfaceName in networkInterfaces) {
+    for (const iface of networkInterfaces[interfaceName]) {
+      // Vérifier si l'adresse est une adresse IPv4 et non interne
+      if (iface.family === "IPv4" && !iface.internal) {
+        ipAddress = iface.address;
+        break;
+      }
+    }
+  }
+
+  // Si l'adresse IP est une adresse interne (ex: 172.x.x.x ou 127.x.x.x), on retourne localhost
+  if (
+    ipAddress.startsWith("172.") ||
+    ipAddress.startsWith("127.") ||
+    ipAddress === "localhost"
+  ) {
+    ipAddress = "localhost";
+  }
+
+  return ipAddress;
+};
+
+// Démarrage du serveur
+app.listen(PORT, "0.0.0.0", () => {
+  const ipAddress = getIpAddress();
+  console.log(`Serveur démarré sur l'adresse http://${ipAddress}:${PORT}`);
 });
-  
