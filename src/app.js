@@ -64,6 +64,7 @@ app.post("/auth/register", async (req, res) => {
 // --------------------------------------------------------------------------------------------------------------------
 
 // définition du port au lancement du server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`http://localhost:${PORT}/`);
 });
+  
