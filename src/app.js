@@ -77,6 +77,21 @@ app.get("/user", authenticateToken, (req, res) => {
   });
 });
 
+// Endpoint pour créer une session
+app.post("/session/create", (req, res) => {
+  const { userId } = req.body;
+  db.run(
+    "INSERT INTO sessions (status, user1_id, last_activity) VALUES (?, ?, ?)",
+    ['open', userId, new Date()],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ message: "Erreur lors de la création de la session" });
+      }
+      res.status(200).json({ sessionId: this.lastID });
+    }
+  );
+});
+
 // --------------------------------------------------------------------------------------------------------------------
 
 // Démarrage du serveur HTTP ou HTTPS
