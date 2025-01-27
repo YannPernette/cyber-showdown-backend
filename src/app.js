@@ -30,7 +30,9 @@ app.use(cookieParser());
 // Message personnalisé à la racine pour s'assurer que l'API marche
 app.get("/", (req, res) => {
   res.send(
-    `Bienvenue sur l'API de Cyber Showdown (${ENV === "production" ? "HTTPS" : "HTTP"})`
+    `Bienvenue sur l'API de Cyber Showdown (${
+      ENV === "production" ? "HTTPS" : "HTTP"
+    })`
   );
 });
 
@@ -39,28 +41,32 @@ app.post("/auth/register", async (req, res) => {
   const { email, username, password, description, profile_picture } = req.body;
 
   try {
-    db.get("SELECT id FROM users WHERE email = ?", [email], async (err, user) => {
-      if (err) return res.status(500).send({ message: "Erreur serveur" });
-      if (user) return res.status(400).send({ message: "Email déjà pris" });
+    db.get(
+      "SELECT id FROM users WHERE email = ?",
+      [email],
+      async (err, user) => {
+        if (err) return res.status(500).send({ message: "Erreur serveur" });
+        if (user) return res.status(400).send({ message: "Email déjà pris" });
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-      db.run(
-        "INSERT INTO users (email, username, password, description, profile_picture) VALUES (?, ?, ?, ?, ?)",
-        [email, username, hashedPassword, description, profile_picture],
-        function (err) {
-          if (err)
-            return res
-              .status(500)
-              .json({ message: "Erreur lors de la création du compte" });
+        db.run(
+          "INSERT INTO users (email, username, password, description, profile_picture) VALUES (?, ?, ?, ?, ?)",
+          [email, username, hashedPassword, description, profile_picture],
+          function (err) {
+            if (err)
+              return res
+                .status(500)
+                .json({ message: "Erreur lors de la création du compte" });
 
-          const token = jwt.sign({ id: this.lastID, email }, JWT_SECRET, {
-            expiresIn: "24h",
-          });
-          res.status(200).json({ token });
-        }
-      );
-    });
+            const token = jwt.sign({ id: this.lastID, email }, JWT_SECRET, {
+              expiresIn: "24h",
+            });
+            res.status(200).json({ token });
+          }
+        );
+      }
+    );
   } catch (error) {
     res.status(500).json({ message: "Erreur serveur", error });
   }
@@ -82,12 +88,41 @@ app.post("/session/create", (req, res) => {
   const { userId } = req.body;
   db.run(
     "INSERT INTO sessions (status, user1_id, last_activity) VALUES (?, ?, ?)",
-    ['open', userId, new Date()],
+    ["open", userId, new Date()],
     function (err) {
       if (err) {
-        return res.status(500).json({ message: "Erreur lors de la création de la session" });
+        return res
+          .status(500)
+          .json({ message: "Erreur lors de la création de la session" });
       }
       res.status(200).json({ sessionId: this.lastID });
+    }
+  );
+});
+
+// Endpoint pour rejoindre une session
+app.post("/session/join", (req, res) => {
+  const { userId } = req.body;
+  db.get(
+    "SELECT * FROM sessions WHERE status = 'open' LIMIT 1",
+    (err, session) => {
+      if (err || !session) {
+        return res.status(404).json({ message: "Aucune session disponible" });
+      }
+
+      // Mettre à jour la session pour ajouter le deuxième utilisateur
+      db.run(
+        "UPDATE sessions SET status = 'full', user2_id = ?, last_activity = ? WHERE id = ?",
+        [userId, new Date(), session.id],
+        function (err) {
+          if (err) {
+            return res.status(500).json({
+              message: "Erreur lors de l'ajout du joueur à la session",
+            });
+          }
+          res.status(200).json({ sessionId: session.id });
+        }
+      );
     }
   );
 });
@@ -120,6 +155,8 @@ if (ENV === "production") {
 } else {
   // Serveur HTTP en développement
   http.createServer(app).listen(PORT, "0.0.0.0", () => {
-    console.log(`Serveur HTTP démarré en mode développement : http://localhost:${PORT}`);
+    console.log(
+      `Serveur HTTP démarré en mode développement : http://localhost:${PORT}`
+    );
   });
 }
