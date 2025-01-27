@@ -66,6 +66,19 @@ app.post("/auth/register", async (req, res) => {
   }
 });
 
+// afficher les infos d'un utilisateur
+app.get("/user", authenticateToken, (req, res) => {
+  db.get("SELECT * FROM users WHERE id = ?", [req.user.id], (err, userData) => {
+    if (err)
+      return res
+        .status(500)
+        .json({
+          error: "Erreur lors de la récupération des infos de l'utilisateur",
+        });
+    res.json(userData);
+  });
+});
+
 // --------------------------------------------------------------------------------------------------------------------
 
 // Fonction pour obtenir l'adresse IP de l'interface réseau
