@@ -38,17 +38,34 @@ if (ENV === "production") {
   server = http.createServer(app);
 }
 
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://cyber-showdown.yann-pernette.fr",
+];
+
+// CORS
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST"],
+    credentials: true,
+  })
+);
+
 // gestion Socket.io
 const io = socketIO(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
-
-// Configuration CORS
-app.use(cors());
 
 // Parse des données en JSON avec une limite augmentée
 app.use(express.json({ limit: "10mb" }));
