@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 4000;
 const ENV = process.env.NODE_ENV || "development";
 
 // définition du serveur
-if (process.env.ENV === "production") {
+if (ENV === "production") {
   // Charger les certificats SSL pour HTTPS
   const privateKey = fs.readFileSync(
     "/etc/letsencrypt/live/cyber-showdown-backend.yann-pernette.fr/privkey.pem",
