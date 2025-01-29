@@ -24,6 +24,17 @@ function initDatabase() {
         profile_picture BLOB
       );
     `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'open',
+        user1_id INTEGER,
+        user2_id INTEGER,
+        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        timeout_duration INTEGER DEFAULT 30
+      );
+    `);
   });
 }
 
