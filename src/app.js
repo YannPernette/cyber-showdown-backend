@@ -18,6 +18,7 @@ const PORT = process.env.PORT || 4000;
 const ENV = process.env.NODE_ENV || "development";
 
 // définition du serveur
+let server;
 if (ENV === "production") {
   // Charger les certificats SSL pour HTTPS
   const privateKey = fs.readFileSync(
@@ -239,7 +240,7 @@ setInterval(() => {
           err
         );
       } else {
-        console.log("Sessions inactive fermée");
+        console.log("Session inactive fermée");
       }
     }
   );
