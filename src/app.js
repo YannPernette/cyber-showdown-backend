@@ -303,7 +303,12 @@ io.on("connection", (socket) => {
   // Gérer l'événement "join-session" pour associer un socket à une session
   socket.on("join-session", (sessionId) => {
     socket.sessionId = sessionId;
+    socket.join(sessionId); // Rejoindre une "room" spécifique à la session
+
     console.log("Utilisateur a rejoint la session :", sessionId);
+
+    // 🔄 Informer tous les joueurs de cette session qu'un joueur a rejoint
+    io.to(sessionId).emit("session-updated");
   });
 
   // Recevoir des "pings" pour mettre à jour l'activité
