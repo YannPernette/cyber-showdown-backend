@@ -195,33 +195,64 @@ app.post("/session/join", authenticateToken, (req, res) => {
 // Endpoint pour afficher les informations d'une session
 app.get("/session/:id", authenticateToken, (req, res) => {
   const sessionId = req.params.id;
+  const userId = req.user.id; // Supposons que l'ID de l'utilisateur est disponible dans `req.user`
 
-  const query = `
-    SELECT 
-    sessions.*, 
-    user1.*, 
-    user2.* 
-    FROM sessions
-    LEFT JOIN users AS user1 ON sessions.user1_id = user1.id
-    LEFT JOIN users AS user2 ON sessions.user2_id = user2.id
-    WHERE sessions.id = ?
-  `;
+  // Vérifie si l'utilisateur a accès à la session (en tant que user1 ou user2)
+  db.get(
+    `
+    SELECT s.* 
+    FROM sessions s
+    WHERE s.id = ? AND (s.user1_id = ? OR s.user2_id = ?)
+    `,
+    [sessionId, userId, userId],
+    (err, session) => {
+      if (err) {
+        return res
+          .status(500)
+          .json({ error: "Erreur lors de la récupération de la session" });
+      }
+      if (!session) {
+        return res.status(404).json({ error: "Session non trouvée ou accès refusé" });
+      }
 
-  db.get(query, [sessionId], (err, sessionData) => {
-    if (err) {
-      return res.status(500).json({
-        error: "Erreur lors de la récupération des informations de la session",
-      });
+      // Récupérer les informations des utilisateurs (user1 et user2)
+      Promise.all([
+        new Promise((resolve, reject) => {
+          db.get(
+            "SELECT * FROM users WHERE id = ?",
+            [session.user1_id],
+            (err, user1) => {
+              if (err)
+                return reject("Erreur lors de la récupération de user1");
+              resolve(user1);
+            }
+          );
+        }),
+        new Promise((resolve, reject) => {
+          db.get(
+            "SELECT * FROM users WHERE id = ?",
+            [session.user2_id],
+            (err, user2) => {
+              if (err)
+                return reject("Erreur lors de la récupération de user2");
+              resolve(user2);
+            }
+          );
+        }),
+      ])
+        .then(([user1, user2]) => {
+          // Retourner la réponse consolidée
+          res.json({
+            ...session,
+            user1,
+            user2,
+          });
+        })
+        .catch((error) => {
+          res.status(500).json({ error });
+        });
     }
-
-    if (!sessionData) {
-      return res.status(404).json({
-        message: "Session non trouvée",
-      });
-    }
-
-    res.status(200).json(sessionData);
-  });
+  );
 });
 
 // Tâche planifiée pour fermer les sessions inactives
