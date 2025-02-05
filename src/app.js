@@ -255,6 +255,18 @@ app.get("/session/:id", authenticateToken, (req, res) => {
   );
 });
 
+// Endpoint pour sélectionner un jeu de manière aléatoire
+app.get("/random-game", authenticateToken, (req, res) => {
+  db.get("SELECT * FROM games ORDER BY RANDOM() LIMIT 1", (err, gameData) => {
+    if (err) {
+      return res.status(500).json({
+        error: "Erreur lors de la récupération du jeu",
+      });
+    }
+    res.json(gameData);
+  });
+});
+
 // Tâche planifiée pour fermer les sessions inactives
 const INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 minutes
 setInterval(() => {
