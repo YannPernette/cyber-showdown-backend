@@ -32,8 +32,9 @@ function initDatabase() {
         status TEXT NOT NULL DEFAULT 'open',
         user1_id INTEGER,
         user2_id INTEGER,
-        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        timeout_duration INTEGER DEFAULT 30
+        user1_lives INTEGER DEFAULT 3,
+        user2_lives INTEGER DEFAULT 3,
+        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 

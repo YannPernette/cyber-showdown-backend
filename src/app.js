@@ -195,7 +195,7 @@ app.post("/session/join", authenticateToken, (req, res) => {
 // Endpoint pour afficher les informations d'une session
 app.get("/session/:id", authenticateToken, (req, res) => {
   const sessionId = req.params.id;
-  const userId = req.user.id; // Supposons que l'ID de l'utilisateur est disponible dans `req.user`
+  const userId = req.user.id;
 
   // Vérifie si l'utilisateur a accès à la session (en tant que user1 ou user2)
   db.get(
@@ -212,7 +212,9 @@ app.get("/session/:id", authenticateToken, (req, res) => {
           .json({ error: "Erreur lors de la récupération de la session" });
       }
       if (!session) {
-        return res.status(404).json({ error: "Session non trouvée ou accès refusé" });
+        return res
+          .status(404)
+          .json({ error: "Session non trouvée ou accès refusé" });
       }
 
       // Récupérer les informations des utilisateurs (user1 et user2)
@@ -222,8 +224,7 @@ app.get("/session/:id", authenticateToken, (req, res) => {
             "SELECT * FROM users WHERE id = ?",
             [session.user1_id],
             (err, user1) => {
-              if (err)
-                return reject("Erreur lors de la récupération de user1");
+              if (err) return reject("Erreur lors de la récupération de user1");
               resolve(user1);
             }
           );
@@ -233,8 +234,7 @@ app.get("/session/:id", authenticateToken, (req, res) => {
             "SELECT * FROM users WHERE id = ?",
             [session.user2_id],
             (err, user2) => {
-              if (err)
-                return reject("Erreur lors de la récupération de user2");
+              if (err) return reject("Erreur lors de la récupération de user2");
               resolve(user2);
             }
           );
@@ -267,6 +267,70 @@ app.get("/random-game", authenticateToken, (req, res) => {
   });
 });
 
+// Endpoint pour diminuer les vies d'un utilisateur dans une session
+app.post("/session/:id/decrease-lives", authenticateToken, (req, res) => {
+  const sessionId = req.params.id;
+  const userId = req.user.id;
+
+  // Vérifie si l'utilisateur appartient à la session
+  db.get(
+    `SELECT * FROM sessions WHERE id = ? AND (user1_id = ? OR user2_id = ?)`,
+    [sessionId, userId, userId],
+    (err, session) => {
+      if (err) {
+        return res
+          .status(500)
+          .json({ error: "Erreur lors de la récupération de la session" });
+      }
+      if (!session) {
+        return res
+          .status(404)
+          .json({ error: "Session non trouvée ou accès refusé" });
+      }
+
+      // Déterminer quel utilisateur est en train de jouer
+      let columnToUpdate = null;
+      let currentLives = null;
+
+      if (session.user1_id === userId) {
+        columnToUpdate = "user1_lives";
+        currentLives = session.user1_lives;
+      } else if (session.user2_id === userId) {
+        columnToUpdate = "user2_lives";
+        currentLives = session.user2_lives;
+      }
+
+      if (columnToUpdate === null) {
+        return res.status(403).json({ error: "Accès refusé" });
+      }
+
+      // Empêcher les vies négatives
+      if (currentLives <= 0) {
+        return res.status(400).json({ error: "Aucune vie restante" });
+      }
+
+      // Mise à jour des vies
+      db.run(
+        `UPDATE sessions SET ${columnToUpdate} = ? WHERE id = ?`,
+        [currentLives - 1, sessionId],
+        function (updateErr) {
+          if (updateErr) {
+            return res
+              .status(500)
+              .json({ error: "Erreur lors de la mise à jour des vies" });
+          }
+          res.json({
+            message: "Vie diminuée avec succès",
+            [columnToUpdate]: currentLives - 1,
+          });
+        }
+      );
+    }
+  );
+});
+
+// --------------------------------------------------------------------------------------------------------------------
+
 // Tâche planifiée pour fermer les sessions inactives
 const INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 minutes
 setInterval(() => {
@@ -288,6 +352,8 @@ setInterval(() => {
     }
   );
 }, 60 * 1000); // Vérifie toutes les minutes
+
+// --------------------------------------------------------------------------------------------------------------------
 
 // Gestion des connexions Socket.IO
 io.on("connection", (socket) => {
