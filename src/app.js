@@ -374,15 +374,24 @@ io.on("connection", (socket) => {
     // Fermer la session si elle est liée au socket
     const sessionId = socket.sessionId;
     if (sessionId) {
-      db.run(
-        "UPDATE sessions SET status = 'closed' WHERE id = ?",
-        [sessionId],
-        (err) => {
-          if (err)
-            console.error("Erreur lors de la fermeture de la session :", err);
-          else console.log("Session fermée :", sessionId);
+      setTimeout(() => {
+        // Vérifier si la session est toujours fermée avant d'agir
+        if (io.sockets.adapter.rooms.get(sessionId)) {
+          console.log(
+            `Session ${sessionId} encore active, annulation de la fermeture.`
+          );
+          return;
         }
-      );
+        db.run(
+          "UPDATE sessions SET status = 'closed' WHERE id = ?",
+          [sessionId],
+          (err) => {
+            if (err)
+              console.error("Erreur lors de la fermeture de la session :", err);
+            else console.log("Session fermée :", sessionId);
+          }
+        );
+      }, 5000);
 
       // Retirer le joueur de la liste des joueurs prêts
       if (playersReady.has(sessionId)) {
