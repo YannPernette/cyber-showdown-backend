@@ -25,15 +25,35 @@ function initDatabase() {
       );
     `);
 
+    // table avec les infos des sessions
     db.run(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
         status TEXT NOT NULL DEFAULT 'open',
         user1_id INTEGER,
         user2_id INTEGER,
-        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        timeout_duration INTEGER DEFAULT 30
+        user1_lives INTEGER DEFAULT 3,
+        user2_lives INTEGER DEFAULT 3,
+        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `);
+
+    // table avec les infos des jeux
+    db.run(`
+      CREATE TABLE IF NOT EXISTS games (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        time TEXT NOT NULL,
+        win_condition TEXT NOT NULL
+      );
+    `);
+
+    // Insérer un jeu seulement s'il n'existe pas déjà
+    db.run(`
+      INSERT OR IGNORE INTO games (name, time, win_condition) VALUES ('enable_vpn', 'five_seconds', 'VPN Activated');
+    `);
+    db.run(`
+      INSERT OR IGNORE INTO games (name, time, win_condition) VALUES ('enable_vpn2', 'five_seconds', 'VPN Activated2');
     `);
   });
 }
