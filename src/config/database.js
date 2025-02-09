@@ -50,7 +50,10 @@ function initDatabase() {
 
     // Insérer un jeu seulement s'il n'existe pas déjà
     db.run(`
-      INSERT OR IGNORE INTO games (name, time, win_condition) VALUES ('enable_vpn', 'five_seconds', 'VPN Activated')
+      INSERT OR IGNORE INTO games (name, time, win_condition) VALUES ('enable_vpn', 'five_seconds', 'VPN Activated');
+    `);
+    db.run(`
+      INSERT OR IGNORE INTO games (name, time, win_condition) VALUES ('enable_vpn2', 'five_seconds', 'VPN Activated2');
     `);
   });
 }

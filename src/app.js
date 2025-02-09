@@ -256,12 +256,17 @@ app.get("/session/:id", authenticateToken, (req, res) => {
 });
 
 // Endpoint pour sélectionner un jeu de manière aléatoire
+let lastGameId = null; // Stocke l'ID du dernier jeu retourné
 app.get("/random-game", authenticateToken, (req, res) => {
-  db.get("SELECT * FROM games ORDER BY RANDOM() LIMIT 1", (err, gameData) => {
+  let query = "SELECT * FROM games WHERE id != ? ORDER BY RANDOM() LIMIT 1";
+  db.get(query, [lastGameId || -1], (err, gameData) => {
     if (err) {
-      return res.status(500).json({
-        error: "Erreur lors de la récupération du jeu",
-      });
+      return res
+        .status(500)
+        .json({ error: "Erreur lors de la récupération du jeu" });
+    }
+    if (gameData) {
+      lastGameId = gameData.id; // Met à jour l'ID du dernier jeu sélectionné
     }
     res.json(gameData);
   });
@@ -355,6 +360,9 @@ setInterval(() => {
 
 // --------------------------------------------------------------------------------------------------------------------
 
+// Stocker les joueurs prêts par session (en dehors du gestionnaire de connexion)
+const playersReady = new Map(); // Clé = sessionId, Valeur = Set des joueurs prêts
+
 // Gestion des connexions Socket.IO
 io.on("connection", (socket) => {
   console.log("Utilisateur connecté :", socket.id);
@@ -364,7 +372,7 @@ io.on("connection", (socket) => {
     console.log("Utilisateur déconnecté :", socket.id);
 
     // Fermer la session si elle est liée au socket
-    const sessionId = socket.sessionId; // Assurez-vous de stocker l'ID de session
+    const sessionId = socket.sessionId;
     if (sessionId) {
       db.run(
         "UPDATE sessions SET status = 'closed' WHERE id = ?",
@@ -375,18 +383,59 @@ io.on("connection", (socket) => {
           else console.log("Session fermée :", sessionId);
         }
       );
+
+      // Retirer le joueur de la liste des joueurs prêts
+      if (playersReady.has(sessionId)) {
+        playersReady.get(sessionId).delete(socket.id);
+      }
     }
   });
 
-  // Gérer l'événement "join-session" pour associer un socket à une session
+  // Gérer l'événement "join-session"
   socket.on("join-session", (sessionId) => {
     socket.sessionId = sessionId;
-    socket.join(sessionId); // Rejoindre une "room" spécifique à la session
+    socket.join(sessionId);
 
     console.log("Utilisateur a rejoint la session :", sessionId);
 
     // 🔄 Informer tous les joueurs de cette session qu'un joueur a rejoint
     io.to(sessionId).emit("session-updated");
+  });
+
+  socket.on("all-there", (sessionId) => {
+    io.to(sessionId).emit("go-game");
+  });
+
+  // Recevoir l'état "prêt" d'un joueur
+  socket.on("player-ready", (sessionId) => {
+    if (!sessionId) return;
+
+    // Initialiser la session si elle n'existe pas encore
+    if (!playersReady.has(sessionId)) {
+      playersReady.set(sessionId, new Set());
+    }
+
+    // Ajouter le joueur dans le set de la session
+    const sessionReadyPlayers = playersReady.get(sessionId);
+    sessionReadyPlayers.add(socket.id);
+
+    console.log(`Joueur ${socket.id} prêt dans la session ${sessionId}`);
+    console.log(`Joueurs prêts : ${sessionReadyPlayers.size}/2`);
+
+    // Vérifier si les deux joueurs sont prêts
+    if (sessionReadyPlayers.size === 2) {
+      console.log(
+        `Tous les joueurs sont prêts dans la session ${sessionId}. Démarrage du jeu.`
+      );
+      io.to(sessionId).emit("start-countdown");
+
+      // Optionnel : Réinitialiser les joueurs prêts pour éviter des problèmes dans une future partie
+      playersReady.delete(sessionId);
+    }
+  });
+
+  socket.on("start-game", (sessionId) => {
+    io.to(sessionId).emit("game-started");
   });
 
   // Recevoir des "pings" pour mettre à jour l'activité
@@ -402,6 +451,11 @@ io.on("connection", (socket) => {
         }
       }
     );
+  });
+
+  socket.on("decrease-lives", (sessionId) => {
+    console.log("-1 vie");
+    io.to(sessionId).emit("life-removed");
   });
 });
 
