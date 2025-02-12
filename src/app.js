@@ -92,7 +92,7 @@ app.get("/", (req, res) => {
 
 // Endpoint pour l'inscription
 app.post("/auth/register", async (req, res) => {
-  const { email, username, password, description, profile_picture } = req.body;
+  const { email, username, password, profile_picture } = req.body;
 
   try {
     db.get(
@@ -105,8 +105,8 @@ app.post("/auth/register", async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         db.run(
-          "INSERT INTO users (email, username, password, description, profile_picture) VALUES (?, ?, ?, ?, ?)",
-          [email, username, hashedPassword, description, profile_picture],
+          "INSERT INTO users (email, username, password, profile_picture) VALUES (?, ?, ?, ?)",
+          [email, username, hashedPassword, profile_picture],
           function (err) {
             if (err)
               return res
@@ -119,6 +119,35 @@ app.post("/auth/register", async (req, res) => {
             res.status(200).json({ token });
           }
         );
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ message: "Erreur serveur", error });
+  }
+});
+
+// Endpoint pour la connexion
+app.post("/auth/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    db.get(
+      "SELECT * FROM users WHERE email = ?",
+      [email],
+      async (err, user) => {
+        if (err) return res.status(500).json({ message: "Erreur serveur" });
+        if (!user)
+          return res.status(401).json({ message: "Identifiants invalides" });
+
+        const validPassword = await bcrypt.compare(password, user.password);
+        if (!validPassword)
+          return res.status(401).json({ message: "Identifiants invalides" });
+
+        const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+          expiresIn: "24h",
+        });
+        // Redirection vers le tableau de bord après connexion réussie
+        res.status(200).json({ token });
       }
     );
   } catch (error) {
@@ -256,19 +285,91 @@ app.get("/session/:id", authenticateToken, (req, res) => {
 });
 
 // Endpoint pour sélectionner un jeu de manière aléatoire
-let lastGameId = null; // Stocke l'ID du dernier jeu retourné
-app.get("/random-game", authenticateToken, (req, res) => {
-  let query = "SELECT * FROM games WHERE id != ? ORDER BY RANDOM() LIMIT 1";
-  db.get(query, [lastGameId || -1], (err, gameData) => {
-    if (err) {
+app.get("/session/:id/random-game", authenticateToken, (req, res) => {
+  const sessionId = req.params.id;
+  const userId = req.user.id;
+
+  if (!sessionId) {
+    return res.status(400).json({ error: "Session ID manquant" });
+  }
+
+  console.log("User ID:", userId);
+
+  // Vérifier quel joueur fait la requête
+  let queryCheckUser = "SELECT user1_id, user2_id FROM sessions WHERE id = ?";
+
+  db.get(queryCheckUser, [sessionId], (err, sessionData) => {
+    if (err || !sessionData) {
       return res
         .status(500)
-        .json({ error: "Erreur lors de la récupération du jeu" });
+        .json({ error: "Erreur lors de la récupération de la session" });
     }
-    if (gameData) {
-      lastGameId = gameData.id; // Met à jour l'ID du dernier jeu sélectionné
-    }
-    res.json(gameData);
+
+    console.log("Session Data:", sessionData);
+
+    const isUser1 = sessionData.user1_id === userId;
+
+    // Récupérer le dernier jeu joué pour éviter de le répéter
+    let queryLastGame =
+      "SELECT game_id FROM games_played WHERE session_id = ? ORDER BY id DESC LIMIT 1";
+
+    db.get(queryLastGame, [sessionId], (err, lastRow) => {
+      if (err) {
+        return res
+          .status(500)
+          .json({ error: "Erreur lors de la récupération du dernier jeu" });
+      }
+
+      const lastGameId = lastRow ? lastRow.game_id : -1; // Si aucun jeu, -1 pour ne pas exclure
+
+      // Sélectionner un jeu aléatoire différent du dernier
+      let queryRandom =
+        "SELECT * FROM games WHERE id != ? ORDER BY RANDOM() LIMIT 1";
+
+      db.get(queryRandom, [lastGameId], (randomErr, gameData) => {
+        if (randomErr || !gameData) {
+          return res
+            .status(500)
+            .json({ error: "Erreur lors de la sélection aléatoire du jeu" });
+        }
+
+        // Insérer le nouveau jeu dans games_played uniquement si l'utilisateur est user1
+        if (isUser1) {
+          let insertQuery =
+            "INSERT INTO games_played (game_id, session_id) VALUES (?, ?)";
+
+          db.run(insertQuery, [gameData.id, sessionId], function (insertErr) {
+            if (insertErr) {
+              return res
+                .status(500)
+                .json({ error: "Erreur lors de l'insertion du jeu" });
+            }
+
+            // Récupérer le jeu inséré depuis games_played
+            let selectInsertedGame =
+              "SELECT gp.*, g.* FROM games_played gp JOIN games g ON gp.game_id = g.id WHERE gp.id = ?";
+
+            db.get(
+              selectInsertedGame,
+              [this.lastID],
+              (selectErr, insertedGameData) => {
+                if (selectErr || !insertedGameData) {
+                  return res.status(500).json({
+                    error: "Erreur lors de la récupération du jeu inséré",
+                  });
+                }
+
+                // Renvoyer le jeu inséré pour User 1 et User 2
+                res.json(insertedGameData);
+              }
+            );
+          });
+        } else {
+          // Si l'utilisateur n'est pas user1, renvoyer simplement le jeu sélectionné sans l'insérer
+          res.json(gameData);
+        }
+      });
+    });
   });
 });
 
@@ -332,6 +433,36 @@ app.post("/session/:id/decrease-lives", authenticateToken, (req, res) => {
       );
     }
   );
+});
+
+// Endpoint pour afficher tous les jeux d'une session spécifique
+app.get("/games-played/:id", authenticateToken, (req, res) => {
+  const sessionId = req.params.id; // Récupérer l'ID de la session depuis les paramètres de l'URL
+
+  // Requête SQL pour sélectionner tous les jeux associés à la session (sans doublons)
+  const query = `
+    SELECT DISTINCT games.*
+    FROM games_played
+    JOIN games ON games_played.game_id = games.id
+    WHERE games_played.session_id = ?
+  `;
+
+  // Exécuter la requête
+  db.all(query, [sessionId], (err, gamesData) => {
+    if (err) {
+      console.error("Erreur lors de la récupération des jeux :", err);
+      return res.status(500).json({
+        error: "Erreur lors de la récupération des jeux de la session",
+      });
+    }
+
+    if (!gamesData || gamesData.length === 0) {
+      return res.status(404).json({ error: "Aucun jeu trouvé pour cette session" });
+    }
+
+    // Renvoyer les données des jeux (sans doublons)
+    res.json(gamesData);
+  });
 });
 
 // --------------------------------------------------------------------------------------------------------------------
